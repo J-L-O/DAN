@@ -69,8 +69,6 @@ tensorboard-data-server==0.6.1
 tensorboard-plugin-wit==1.8.1
 threadpoolctl==3.1.0
 tifffile==2022.2.9
-torch==1.8.1
-torchvision==0.9.1
 tqdm==4.62.3
 typing_extensions==4.1.1
 urllib3==1.26.8
