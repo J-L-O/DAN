@@ -10,7 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libpng-dev \
         libpango1.0-dev \
         pkg-config \
-        python3-dev && \
+        python3-dev \
+        ffmpeg \
+        libsm6 \
+        libxext6 && \
     rm -rf /var/lib/apt/lists/*
 ENV PATH /opt/conda/bin:$PATH
 
@@ -29,6 +32,9 @@ ENV LD_LIBRARY_PATH /usr/local/nvidia/lib:/usr/local/nvidia/lib64
 
 WORKDIR /workspace
 COPY ./requirements.txt /workspace/requirements.txt
-RUN pip install cython && pip install -r requirements.txt && pip cache purge && rm requirements.txt
-
-
+RUN pip install \
+        cython \
+        pydevd-pycharm~=213.6777.50 && \
+    pip install -r requirements.txt && \
+    pip cache purge && \
+    rm requirements.txt
