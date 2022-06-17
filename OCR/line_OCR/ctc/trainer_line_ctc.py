@@ -79,7 +79,7 @@ class TrainerLineCTC(OCRManager):
 
         return values
 
-    def evaluate_batch(self, batch_data, metric_names):
+    def evaluate_batch(self, batch_data):
         """
         Forward pass only for validation and test
         """

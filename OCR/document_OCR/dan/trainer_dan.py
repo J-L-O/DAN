@@ -96,7 +96,7 @@ class Manager(OCRManager):
 
         return values
 
-    def evaluate_batch(self, batch_data, metric_names):
+    def evaluate_batch(self, batch_data):
         x = batch_data["imgs"].to(self.device)
         reduced_size = [s[:2] for s in batch_data["imgs_reduced_shape"]]
 

@@ -17,6 +17,10 @@ import numpy as np
 import random
 import torch.multiprocessing as mp
 
+if os.environ.get('REMOTE_PYCHARM_DEBUG_SESSION', False):
+    import pydevd_pycharm
+    pydevd_pycharm.settrace('localhost', port=12034, stdoutToServer=True, stderrToServer=True, suspend=False)
+
 
 def train_and_test(rank, params):
     torch.manual_seed(0)
@@ -30,16 +34,24 @@ def train_and_test(rank, params):
     model = Manager(params)
     model.load_model()
 
-    model.train()
+    if not params["training_params"]["evaluate_only"]:
+        model.train()
 
-    # load weights giving best CER on valid set
-    model.params["training_params"]["load_epoch"] = "best"
-    model.load_model()
+        # load weights giving best CER on valid set
+        model.params["training_params"]["load_epoch"] = "best"
+        model.load_model()
 
-    metrics = ["cer", "wer", "time", "map_cer",  "loer"]
+    metrics = []
+
+    if params["dataset_params"]["config"]["is_labeled"]:
+        metrics += ["cer", "wer", "time", "map_cer", "loer"]
+
+    store_text = params["training_params"]["store_text"]
+
     for dataset_name in params["dataset_params"]["datasets"].keys():
         for set_name in ["test", "valid", "train"]:
-            model.predict("{}-{}".format(dataset_name, set_name), [(dataset_name, set_name), ], metrics, output=True)
+            model.predict("{}-{}".format(dataset_name, set_name), [(dataset_name, set_name), ], metrics,
+                          output=True, store_text=store_text)
 
 
 if __name__ == "__main__":
@@ -69,6 +81,7 @@ if __name__ == "__main__":
                 "{}-valid".format(dataset_name): [(dataset_name, "valid"), ],
             },
             "config": {
+                "is_labeled": False,
                 "load_in_memory": True,  # Load all images in CPU memory
                 "worker_per_gpu": 4,  # Num of parallel processes per gpu for data loading
                 "width_divisor": 8,  # Image width will be divided by 8
@@ -162,7 +175,9 @@ if __name__ == "__main__":
         },
 
         "training_params": {
+            "evaluate_only": True,
             "output_folder": "dan_read_page",  # folder name for checkpoint and results
+            "store_text": True,
             "max_nb_epochs": 50000,  # maximum number of epochs before to stop
             "max_training_time": 3600 * 24 * 1.9,  # maximum time before to stop (in seconds)
             "load_epoch": "last",  # ["best", "last"]: last to continue training, best to evaluate

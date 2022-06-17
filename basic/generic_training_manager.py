@@ -143,7 +143,7 @@ class GenericTrainingManager:
         }
         self.is_master = self.ddp_config["master"] or not self.params["training_params"]["use_ddp"]
         if self.params["training_params"]["force_cpu"]:
-            self.device = "cpu"
+            self.device = torch.device("cpu")
         else:
             if self.params["training_params"]["use_ddp"]:
                 self.device = torch.device(self.ddp_config["rank"])
@@ -162,7 +162,7 @@ class GenericTrainingManager:
             print("##################")
         # local
         print("Local GPU:")
-        if self.device != "cpu":
+        if str(self.device) != "cpu":
             print("Rank {}: {} {}".format(self.params["training_params"]["ddp_rank"], torch.cuda.get_device_name(), torch.cuda.get_device_properties(self.device)))
         else:
             print("WORKING ON CPU !\n")
@@ -207,7 +207,7 @@ class GenericTrainingManager:
         if self.params["training_params"]["load_epoch"] in ("best", "last"):
             for filename in os.listdir(self.paths["checkpoints"]):
                 if self.params["training_params"]["load_epoch"] in filename:
-                    return torch.load(os.path.join(self.paths["checkpoints"], filename))
+                    return torch.load(os.path.join(self.paths["checkpoints"], filename), map_location=self.device)
         return None
 
     def load_existing_model(self, checkpoint, strict=True):
@@ -581,7 +581,7 @@ class GenericTrainingManager:
                 for ind_batch, batch_data in enumerate(loader):
                     self.latest_batch = ind_batch + 1
                     # eval batch data and compute metrics
-                    batch_values = self.evaluate_batch(batch_data, metric_names)
+                    batch_values = self.evaluate_batch(batch_data)
                     batch_metrics = self.metric_manager[set_name].compute_metrics(batch_values, metric_names)
                     batch_metrics["names"] = batch_data["names"]
                     batch_metrics["ids"] = batch_data["ids"]
@@ -599,7 +599,7 @@ class GenericTrainingManager:
             self.log_cer_by_nb_cols(set_name)
         return display_values
 
-    def predict(self, custom_name, sets_list, metric_names, output=False):
+    def predict(self, custom_name, sets_list, metric_names, output=False, store_text=False):
         """
         Main loop for evaluation
         """
@@ -621,7 +621,7 @@ class GenericTrainingManager:
                     # iterates over batch data
                     self.latest_batch = ind_batch + 1
                     # eval batch data and compute metrics
-                    batch_values = self.evaluate_batch(batch_data, metric_names)
+                    batch_values = self.evaluate_batch(batch_data)
                     batch_metrics = self.metric_manager[custom_name].compute_metrics(batch_values, metric_names)
                     batch_metrics["names"] = batch_data["names"]
                     batch_metrics["ids"] = batch_data["ids"]
@@ -632,6 +632,9 @@ class GenericTrainingManager:
                     # add batch metrics to epoch metrics
                     self.metric_manager[custom_name].update_metrics(batch_metrics)
                     display_values = self.metric_manager[custom_name].get_display_values()
+
+                    if store_text:
+                        self.save_predictions(batch_values["str_x"], batch_metrics["names"])
 
                     pbar.set_postfix(values=str(display_values))
                     pbar.update(len(batch_data["names"]))
@@ -646,6 +649,19 @@ class GenericTrainingManager:
             with open(path, "w") as f:
                 for metric_name in metrics.keys():
                     f.write("{}: {}\n".format(metric_name, metrics[metric_name]))
+
+    def save_predictions(self, predictions, names):
+        predictions_path = os.path.join(self.paths["results"], "predictions")
+
+        if not os.path.exists(predictions_path):
+            os.makedirs(predictions_path)
+
+        for name, pred in zip(names, predictions):
+            filename = name.split("/")[-1].split(".")[0] + ".txt"
+            path = os.path.join(predictions_path, filename)
+
+            with open(path, "w") as f:
+                f.write(pred)
 
     def output_pred(self, name):
         path = os.path.join(self.paths["results"], "pred_{}_{}.txt".format(name, self.latest_epoch))
@@ -705,7 +721,7 @@ class GenericTrainingManager:
     def train_batch(self, batch_data, metric_names):
         raise NotImplementedError
 
-    def evaluate_batch(self, batch_data, metric_names):
+    def evaluate_batch(self, batch_data):
         raise NotImplementedError
 
     def init_curriculum(self):
