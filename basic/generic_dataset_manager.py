@@ -214,8 +214,9 @@ class GenericDataset(Dataset):
         self.std = np.array(params["config"]["std"]) if "std" in params["config"].keys() else None
 
         self.load_in_memory = self.params["config"]["load_in_memory"] if "load_in_memory" in self.params["config"] else True
+        self.is_labeled = self.params["config"]["is_labeled"] if "is_labeled" in self.params["config"] else True
 
-        self.samples = self.load_samples(paths_and_sets, load_in_memory=self.load_in_memory)
+        self.samples = self.load_samples(paths_and_sets, load_in_memory=self.load_in_memory, is_labeled=self.is_labeled)
 
         if self.load_in_memory:
             self.apply_preprocessing(params["config"]["preprocessings"])
@@ -243,7 +244,7 @@ class GenericDataset(Dataset):
         return img
 
     @staticmethod
-    def load_samples(paths_and_sets, load_in_memory=True):
+    def load_samples(paths_and_sets, load_in_memory=True, is_labeled=True):
         """
         Load images and labels
         """
@@ -257,26 +258,35 @@ class GenericDataset(Dataset):
                 for filename in natural_sort(gt.keys()):
                     name = os.path.join(os.path.basename(path), set_name, filename)
                     full_path = os.path.join(path, set_name, filename)
-                    if isinstance(gt[filename], dict) and "text" in gt[filename]:
-                        label = gt[filename]["text"]
+
+                    if is_labeled:
+                        if isinstance(gt[filename], dict) and "text" in gt[filename]:
+                            label = gt[filename]["text"]
+                        else:
+                            label = gt[filename]
+                        samples.append({
+                            "name": name,
+                            "label": label,
+                            "unchanged_label": label,
+                            "path": full_path,
+                            "nb_cols": 1 if "nb_cols" not in gt[filename] else gt[filename]["nb_cols"]
+                        })
+                        if type(gt[filename]) is dict:
+                            if "lines" in gt[filename].keys():
+                                samples[-1]["raw_line_seg_label"] = gt[filename]["lines"]
+                            if "paragraphs" in gt[filename].keys():
+                                samples[-1]["paragraphs_label"] = gt[filename]["paragraphs"]
+                            if "pages" in gt[filename].keys():
+                                samples[-1]["pages_label"] = gt[filename]["pages"]
                     else:
-                        label = gt[filename]
-                    samples.append({
-                        "name": name,
-                        "label": label,
-                        "unchanged_label": label,
-                        "path": full_path,
-                        "nb_cols": 1 if "nb_cols" not in gt[filename] else gt[filename]["nb_cols"]
-                    })
+                        samples.append({
+                            "name": name,
+                            "path": full_path,
+                            "nb_cols": 1
+                        })
+
                     if load_in_memory:
                         samples[-1]["img"] = GenericDataset.load_image(full_path)
-                    if type(gt[filename]) is dict:
-                        if "lines" in gt[filename].keys():
-                            samples[-1]["raw_line_seg_label"] = gt[filename]["lines"]
-                        if "paragraphs" in gt[filename].keys():
-                            samples[-1]["paragraphs_label"] = gt[filename]["paragraphs"]
-                        if "pages" in gt[filename].keys():
-                            samples[-1]["pages_label"] = gt[filename]["pages"]
         return samples
 
     def apply_preprocessing(self, preprocessings):

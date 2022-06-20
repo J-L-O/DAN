@@ -56,14 +56,15 @@ def train_and_test(rank, params):
 
 if __name__ == "__main__":
 
-    dataset_name = "READ_2016"  # ["RIMES", "READ_2016"]
-    dataset_level = "page"  # ["page", "double_page"]
+    dataset_name = "WPI" # "READ_2016"  # ["RIMES", "READ_2016", "WPI"]
+    dataset_level = "double_page"  # ["page", "double_page"]
     dataset_variant = "_sem"
 
     # max number of lines for synthetic documents
     max_nb_lines = {
         "RIMES": 40,
         "READ_2016": 30,
+        "WPI": 50  # Made up value
     }
 
     params = {

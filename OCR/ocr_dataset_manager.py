@@ -115,7 +115,10 @@ class OCRDatasetManager(DatasetManager):
     def apply_specific_treatment_after_dataset_loading(self, dataset):
         dataset.charset = self.charset
         dataset.tokens = self.tokens
-        dataset.convert_labels()
+
+        if dataset.is_labeled:
+            dataset.convert_labels()
+
         if "READ_2016" in dataset.name and "augmentation" in dataset.params["config"] and dataset.params["config"]["augmentation"]:
             dataset.params["config"]["augmentation"]["fill_value"] = tuple([int(i) for i in dataset.mean])
         if "padding" in dataset.params["config"] and dataset.params["config"]["padding"]["min_height"] == "max":
@@ -900,43 +903,6 @@ class OCRCollateFunction:
         ids = [int(batch_data[i]["name"].split("/")[-1].split("_")[-1].split(".")[0]) for i in range(len(batch_data))]
         applied_da = [batch_data[i]["applied_da"] for i in range(len(batch_data))]
 
-        labels = [batch_data[i]["token_label"] for i in range(len(batch_data))]
-        labels = pad_sequences_1D(labels, padding_value=self.label_padding_value)
-        labels = torch.tensor(labels).long()
-        reverse_labels = [[batch_data[i]["token_label"][0], ] + batch_data[i]["token_label"][-2:0:-1] + [batch_data[i]["token_label"][-1], ] for i in range(len(batch_data))]
-        reverse_labels = pad_sequences_1D(reverse_labels, padding_value=self.label_padding_value)
-        reverse_labels = torch.tensor(reverse_labels).long()
-        labels_len = [batch_data[i]["label_len"] for i in range(len(batch_data))]
-
-        raw_labels = [batch_data[i]["label"] for i in range(len(batch_data))]
-        unchanged_labels = [batch_data[i]["unchanged_label"] for i in range(len(batch_data))]
-
-        nb_cols = [batch_data[i]["nb_cols"] for i in range(len(batch_data))]
-        nb_lines = [batch_data[i]["nb_lines"] for i in range(len(batch_data))]
-        line_raw = [batch_data[i]["line_label"] for i in range(len(batch_data))]
-        line_token = [batch_data[i]["token_line_label"] for i in range(len(batch_data))]
-        pad_line_token = list()
-        line_len = [batch_data[i]["line_label_len"] for i in range(len(batch_data))]
-        for i in range(max(nb_lines)):
-            current_lines = [line_token[j][i] if i < nb_lines[j] else [self.label_padding_value] for j in range(len(batch_data))]
-            pad_line_token.append(torch.tensor(pad_sequences_1D(current_lines, padding_value=self.label_padding_value)).long())
-            for j in range(len(batch_data)):
-                if i >= nb_lines[j]:
-                    line_len[j].append(0)
-        line_len = [i for i in zip(*line_len)]
-
-        nb_words = [batch_data[i]["nb_words"] for i in range(len(batch_data))]
-        word_raw = [batch_data[i]["word_label"] for i in range(len(batch_data))]
-        word_token = [batch_data[i]["token_word_label"] for i in range(len(batch_data))]
-        pad_word_token = list()
-        word_len = [batch_data[i]["word_label_len"] for i in range(len(batch_data))]
-        for i in range(max(nb_words)):
-            current_words = [word_token[j][i] if i < nb_words[j] else [self.label_padding_value] for j in range(len(batch_data))]
-            pad_word_token.append(torch.tensor(pad_sequences_1D(current_words, padding_value=self.label_padding_value)).long())
-            for j in range(len(batch_data)):
-                if i >= nb_words[j]:
-                    word_len[j].append(0)
-        word_len = [i for i in zip(*word_len)]
 
         padding_mode = self.config["padding_mode"] if "padding_mode" in self.config else "br"
         imgs = [batch_data[i]["img"] for i in range(len(batch_data))]
@@ -946,30 +912,81 @@ class OCRCollateFunction:
         imgs_reduced_position= [batch_data[i]["img_reduced_position"] for i in range(len(batch_data))]
         imgs = pad_images(imgs, padding_value=self.img_padding_value, padding_mode=padding_mode)
         imgs = torch.tensor(imgs).float().permute(0, 3, 1, 2)
-        formatted_batch_data = {
-            "names": names,
-            "ids": ids,
-            "nb_lines": nb_lines,
-            "nb_cols": nb_cols,
-            "labels": labels,
-            "reverse_labels": reverse_labels,
-            "raw_labels": raw_labels,
-            "unchanged_labels": unchanged_labels,
-            "labels_len": labels_len,
-            "imgs": imgs,
-            "imgs_shape": imgs_shape,
-            "imgs_reduced_shape": imgs_reduced_shape,
-            "imgs_position": imgs_position,
-            "imgs_reduced_position": imgs_reduced_position,
-            "line_raw": line_raw,
-            "line_labels": pad_line_token,
-            "line_labels_len": line_len,
-            "nb_words": nb_words,
-            "word_raw": word_raw,
-            "word_labels": pad_word_token,
-            "word_labels_len": word_len,
-            "applied_da": applied_da
-        }
+
+        if self.config["is_labeled"]:
+            labels = [batch_data[i]["token_label"] for i in range(len(batch_data))]
+            labels = pad_sequences_1D(labels, padding_value=self.label_padding_value)
+            labels = torch.tensor(labels).long()
+            reverse_labels = [[batch_data[i]["token_label"][0], ] + batch_data[i]["token_label"][-2:0:-1] + [batch_data[i]["token_label"][-1], ] for i in range(len(batch_data))]
+            reverse_labels = pad_sequences_1D(reverse_labels, padding_value=self.label_padding_value)
+            reverse_labels = torch.tensor(reverse_labels).long()
+            labels_len = [batch_data[i]["label_len"] for i in range(len(batch_data))]
+
+            raw_labels = [batch_data[i]["label"] for i in range(len(batch_data))]
+            unchanged_labels = [batch_data[i]["unchanged_label"] for i in range(len(batch_data))]
+
+            nb_cols = [batch_data[i]["nb_cols"] for i in range(len(batch_data))]
+            nb_lines = [batch_data[i]["nb_lines"] for i in range(len(batch_data))]
+            line_raw = [batch_data[i]["line_label"] for i in range(len(batch_data))]
+            line_token = [batch_data[i]["token_line_label"] for i in range(len(batch_data))]
+            pad_line_token = list()
+            line_len = [batch_data[i]["line_label_len"] for i in range(len(batch_data))]
+            for i in range(max(nb_lines)):
+                current_lines = [line_token[j][i] if i < nb_lines[j] else [self.label_padding_value] for j in range(len(batch_data))]
+                pad_line_token.append(torch.tensor(pad_sequences_1D(current_lines, padding_value=self.label_padding_value)).long())
+                for j in range(len(batch_data)):
+                    if i >= nb_lines[j]:
+                        line_len[j].append(0)
+            line_len = [i for i in zip(*line_len)]
+
+            nb_words = [batch_data[i]["nb_words"] for i in range(len(batch_data))]
+            word_raw = [batch_data[i]["word_label"] for i in range(len(batch_data))]
+            word_token = [batch_data[i]["token_word_label"] for i in range(len(batch_data))]
+            pad_word_token = list()
+            word_len = [batch_data[i]["word_label_len"] for i in range(len(batch_data))]
+            for i in range(max(nb_words)):
+                current_words = [word_token[j][i] if i < nb_words[j] else [self.label_padding_value] for j in range(len(batch_data))]
+                pad_word_token.append(torch.tensor(pad_sequences_1D(current_words, padding_value=self.label_padding_value)).long())
+                for j in range(len(batch_data)):
+                    if i >= nb_words[j]:
+                        word_len[j].append(0)
+            word_len = [i for i in zip(*word_len)]
+
+            formatted_batch_data = {
+                "names": names,
+                "ids": ids,
+                "nb_lines": nb_lines,
+                "nb_cols": nb_cols,
+                "labels": labels,
+                "reverse_labels": reverse_labels,
+                "raw_labels": raw_labels,
+                "unchanged_labels": unchanged_labels,
+                "labels_len": labels_len,
+                "imgs": imgs,
+                "imgs_shape": imgs_shape,
+                "imgs_reduced_shape": imgs_reduced_shape,
+                "imgs_position": imgs_position,
+                "imgs_reduced_position": imgs_reduced_position,
+                "line_raw": line_raw,
+                "line_labels": pad_line_token,
+                "line_labels_len": line_len,
+                "nb_words": nb_words,
+                "word_raw": word_raw,
+                "word_labels": pad_word_token,
+                "word_labels_len": word_len,
+                "applied_da": applied_da
+            }
+        else:
+            formatted_batch_data = {
+                "names": names,
+                "ids": ids,
+                "imgs": imgs,
+                "imgs_shape": imgs_shape,
+                "imgs_reduced_shape": imgs_reduced_shape,
+                "imgs_position": imgs_position,
+                "imgs_reduced_position": imgs_reduced_position,
+                "applied_da": applied_da
+            }
 
         return formatted_batch_data
 

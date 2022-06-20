@@ -155,11 +155,20 @@ class Manager(OCRManager):
 
         process_time = time.time() - start_time
 
-        values = {
-            "nb_samples": b,
-            "str_y": batch_data["raw_labels"],
-            "str_x": str_x,
-            "confidence_score": confidence_scores,
-            "time": process_time,
-        }
+        if "raw_labels" in batch_data.keys():
+            values = {
+                "nb_samples": b,
+                "str_y": batch_data["raw_labels"],
+                "str_x": str_x,
+                "confidence_score": confidence_scores,
+                "time": process_time,
+            }
+        else:
+            values = {
+                "nb_samples": b,
+                "str_x": str_x,
+                "confidence_score": confidence_scores,
+                "time": process_time,
+            }
+
         return values
