@@ -12,4 +12,4 @@ srun  \
 --container-remap-root  \
 --container-workdir /workspace/OCR/line_OCR/ctc \
 --container-mounts "$code_path":/workspace \
-python python main_line_ctc.py
+python main_line_ctc.py
