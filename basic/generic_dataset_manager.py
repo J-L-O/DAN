@@ -31,6 +31,7 @@
 #
 #  The fact that you are presently reading this means that you have had
 #  knowledge of the CeCILL-C license and that you accept its terms.
+from pathlib import Path
 
 import torch
 import random
@@ -216,7 +217,8 @@ class GenericDataset(Dataset):
         self.load_in_memory = self.params["config"]["load_in_memory"] if "load_in_memory" in self.params["config"] else True
         self.is_labeled = self.params["config"]["is_labeled"] if "is_labeled" in self.params["config"] else True
 
-        self.samples = self.load_samples(paths_and_sets, load_in_memory=self.load_in_memory, is_labeled=self.is_labeled)
+        self.samples = self.load_samples(paths_and_sets, load_in_memory=self.load_in_memory, is_labeled=self.is_labeled,
+                                         use_segmentation=self.params["config"]["use_segmentation"])
 
         if self.load_in_memory:
             self.apply_preprocessing(params["config"]["preprocessings"])
@@ -235,16 +237,27 @@ class GenericDataset(Dataset):
         return len(self.samples)
 
     @staticmethod
-    def load_image(path):
+    def load_image(path, load_segmentation=False):
         with Image.open(path) as pil_img:
             img = np.array(pil_img)
             ## grayscale images
             if len(img.shape) == 2:
                 img = np.expand_dims(img, axis=2)
+        if load_segmentation:
+            segmentation_path = Path(path).parent / (Path(path).stem + "_segmentation.png")
+
+            with Image.open(segmentation_path) as pil_img:
+                segmentation = np.array(pil_img)
+
+            segmentation = segmentation.sum(axis=-1).clip(0, 255)
+            segmentation = np.expand_dims(segmentation, axis=2)
+
+            img = np.concatenate((img, segmentation), axis=2)
+
         return img
 
     @staticmethod
-    def load_samples(paths_and_sets, load_in_memory=True, is_labeled=True):
+    def load_samples(paths_and_sets, load_in_memory=True, is_labeled=True, use_segmentation=False):
         """
         Load images and labels
         """
@@ -286,7 +299,7 @@ class GenericDataset(Dataset):
                         })
 
                     if load_in_memory:
-                        samples[-1]["img"] = GenericDataset.load_image(full_path)
+                        samples[-1]["img"] = GenericDataset.load_image(full_path, load_segmentation=use_segmentation)
         return samples
 
     def apply_preprocessing(self, preprocessings):
@@ -351,7 +364,7 @@ class GenericDataset(Dataset):
         if self.load_in_memory:
             return self.samples[i]["img"]
         else:
-            return GenericDataset.load_image(self.samples[i]["path"])
+            return GenericDataset.load_image(self.samples[i]["path"], load_segmentation=self.params["use_segmentation"])
 
     def denormalize(self, img):
         """

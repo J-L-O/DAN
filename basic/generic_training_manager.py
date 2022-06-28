@@ -491,6 +491,8 @@ class GenericTrainingManager:
             # init epoch metrics values
             self.metric_manager["train"] = MetricManager(metric_names=metric_names, dataset_name=self.dataset_name)
 
+            a = self.dataset.train_dataset[0]
+
             with tqdm(total=len(self.dataset.train_loader.dataset)) as pbar:
                 pbar.set_description("EPOCH {}/{}".format(num_epoch, nb_epochs))
                 # iterates over mini-batch data

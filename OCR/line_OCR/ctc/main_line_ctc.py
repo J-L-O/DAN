@@ -50,6 +50,10 @@ import torch
 import numpy as np
 import random
 
+if os.environ.get('REMOTE_PYCHARM_DEBUG_SESSION', False):
+    import pydevd_pycharm
+    pydevd_pycharm.settrace('localhost', port=12034, stdoutToServer=True, stderrToServer=True, suspend=False)
+
 
 def train_and_test(rank, params):
     torch.manual_seed(0)
@@ -80,6 +84,7 @@ def train_and_test(rank, params):
 def main():
     dataset_name = "READ_2016"  # ["RIMES", "READ_2016"]
     dataset_level = "syn_line"
+    use_segmentation = True
     params = {
         "dataset_params": {
             "dataset_manager": OCRDatasetManager,
@@ -95,6 +100,8 @@ def main():
                 "{}-valid".format(dataset_name): [(dataset_name, "valid"), ],
             },
             "config": {
+                "use_segmentation": use_segmentation,  # Use the computed segmentation images
+                "is_labeled": True,
                 "load_in_memory": True,  # Load all images in CPU memory
                 "worker_per_gpu": 8,  # Num of parallel processes per gpu for data loading
                 "width_divisor": 8,  # Image width will be divided by 8
@@ -156,7 +163,7 @@ def main():
                 "decoder": Decoder,
             },
             "transfer_learning": None,
-            "input_channels": 3,  # 1 for grayscale images, 3 for RGB ones (or grayscale as RGB)
+            "input_channels": 4 if use_segmentation else 3,  # 1 for grayscale, 3 for RGB (or grayscale as RGB)
             "enc_size": 256,
             "dropout_scheduler": {
                 "function": exponential_dropout_scheduler,

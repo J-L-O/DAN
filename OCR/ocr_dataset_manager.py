@@ -267,7 +267,7 @@ class OCRDataset(GenericDataset):
                 return sample
 
         if "mode" in config and config["mode"] == "line_hw_to_printed":
-            sample["img"] = self.generate_typed_text_line_image(sample["label"])
+            sample["img"] = self.generate_typed_text_line_image(sample["label"], create_segmentation=self.params["config"]["use_segmentation"])
             return sample
 
         return self.generate_synthetic_page_sample()
@@ -858,8 +858,9 @@ class OCRDataset(GenericDataset):
                             img = self.generate_typed_text_line_image(label)
                             return label, img
 
-    def generate_typed_text_line_image(self, text):
-        return generate_typed_text_line_image(text, self.params["config"]["synthetic_data"]["config"])
+    def generate_typed_text_line_image(self, text, create_segmentation=False):
+        return generate_typed_text_line_image(text, self.params["config"]["synthetic_data"]["config"],
+                                              create_segmentation=create_segmentation)
 
     def generate_typed_text_paragraph_image(self, texts, padding_value=255, max_pad_left_ratio=0.1, same_font_size=False):
         config = self.params["config"]["synthetic_data"]["config"]
@@ -991,7 +992,7 @@ class OCRCollateFunction:
         return formatted_batch_data
 
 
-def generate_typed_text_line_image(text, config, bg_color=(255, 255, 255), txt_color=(0, 0, 0)):
+def generate_typed_text_line_image(text, config, bg_color=(255, 255, 255), txt_color=(0, 0, 0), create_segmentation=False):
     if text == "":
         text = " "
     if "text_color_default" in config:
@@ -1009,18 +1010,31 @@ def generate_typed_text_line_image(text, config, bg_color=(255, 255, 255), txt_c
     padding_left = int(rand_uniform(config["padding_left_ratio_min"], config["padding_left_ratio_max"])*text_width)
     padding_right = int(rand_uniform(config["padding_right_ratio_min"], config["padding_right_ratio_max"])*text_width)
     padding = [padding_top, padding_bottom, padding_left, padding_right]
-    return generate_typed_text_line_image_from_params(text, fnt, bg_color, txt_color, config["color_mode"], padding)
+    return generate_typed_text_line_image_from_params(text, fnt, bg_color, txt_color, config["color_mode"], padding, create_segmentation=create_segmentation)
 
 
-def generate_typed_text_line_image_from_params(text, font, bg_color, txt_color, color_mode, padding):
+def generate_typed_text_line_image_from_params(text, font, bg_color, txt_color, color_mode, padding, create_segmentation=False):
     padding_top, padding_bottom, padding_left, padding_right = padding
     text_width, text_height = font.getsize(text)
     img_height = padding_top + padding_bottom + text_height
     img_width = padding_left + padding_right + text_width
+
     img = Image.new(color_mode, (img_width, img_height), color=bg_color)
     d = ImageDraw.Draw(img)
     d.text((padding_left, padding_bottom), text, font=font, fill=txt_color, spacing=0)
-    return np.array(img)
+
+    img_array = np.array(img)
+
+    if create_segmentation:
+        seg = Image.new("L", (img_width, img_height), color=0)
+        d = ImageDraw.Draw(seg)
+        d.text((padding_left, padding_bottom), text, font=font, fill=255, spacing=0)
+        seg_array = np.array(seg)
+        seg_array = np.expand_dims(seg_array, axis=2)
+
+        img_array = np.concatenate((img_array, seg_array), axis=2)
+
+    return img_array
 
 
 def get_valid_fonts(alphabet=None):

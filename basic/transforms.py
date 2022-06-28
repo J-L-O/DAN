@@ -33,11 +33,15 @@
 #  knowledge of the CeCILL-C license and that you accept its terms.
 
 import numpy as np
+import torch
 from numpy import random
 from PIL import Image, ImageOps
 from cv2 import erode, dilate, normalize
 import cv2
 import math
+
+from torchvision import transforms
+
 from basic.utils import randint, rand_uniform, rand
 from torchvision.transforms import RandomPerspective, RandomCrop, ColorJitter, GaussianBlur, RandomRotation
 from torchvision.transforms.functional import InterpolationMode
@@ -217,11 +221,48 @@ class Tightening:
         return Image.fromarray(new_x.astype(np.uint8))
 
 
+class FixedPerspective(torch.nn.Module):
+    def __init__(self, distortion_scale, fill, interpolation=InterpolationMode.BILINEAR):
+        super().__init__()
+        self.startpoints = None
+        self.endpoints = None
+
+        self.interpolation = interpolation
+        self.distortion_scale = distortion_scale
+
+        if fill is None:
+            fill = 0
+
+        self.fill = fill
+
+    def forward(self, img):
+        num_channels = transforms.functional._get_image_num_channels(img)
+
+        if num_channels == 1:
+            fill = 0
+        else:
+            fill = self.fill
+
+        if isinstance(img, torch.Tensor):
+            if isinstance(fill, (int, float)):
+                fill = [float(fill)] * num_channels
+            else:
+                fill = [float(f) for f in fill]
+
+        if self.startpoints is None:
+            width, height = transforms.functional._get_image_size(img)
+            self.startpoints, self.endpoints = RandomPerspective.get_params(width, height, self.distortion_scale)
+
+        return transforms.functional.perspective(img, self.startpoints, self.endpoints, self.interpolation, fill)
+
+
 def get_list_augmenters(img, aug_configs, fill_value):
     """
     Randomly select a list of data augmentation techniques to used based on aug_configs
     """
     augmenters = list()
+    augmenters_seg = list()
+
     for aug_config in aug_configs:
         if rand() > aug_config["proba"]:
             continue
@@ -233,30 +274,45 @@ def get_list_augmenters(img, aug_configs, fill_value):
                                ("max_height" in aug_config and factor * img.size[1] > aug_config["max_height"]) or \
                                ("min_width" in aug_config and factor*img.size[0] < aug_config["min_width"]) or \
                                ("min_height" in aug_config and factor * img.size[1] < aug_config["min_height"]))
-            augmenters.append(DPIAdjusting(factor, preserve_ratio=aug_config["preserve_ratio"]))
+
+            aug = DPIAdjusting(factor, preserve_ratio=aug_config["preserve_ratio"])
+            augmenters.append(aug)
+            augmenters_seg.append(aug)
 
         elif aug_config["type"] == "zoom_ratio":
             ratio_h = rand_uniform(aug_config["min_ratio_h"], aug_config["max_ratio_h"])
             ratio_w = rand_uniform(aug_config["min_ratio_w"], aug_config["max_ratio_w"])
-            augmenters.append(ZoomRatio(ratio_h=ratio_h, ratio_w=ratio_w, keep_dim=aug_config["keep_dim"]))
+
+            aug = ZoomRatio(ratio_h=ratio_h, ratio_w=ratio_w, keep_dim=aug_config["keep_dim"])
+            augmenters.append(aug)
+            augmenters_seg.append(aug)
 
         elif aug_config["type"] == "perspective":
             scale = rand_uniform(aug_config["min_factor"], aug_config["max_factor"])
-            augmenters.append(RandomPerspective(distortion_scale=scale, p=1, interpolation=InterpolationMode.BILINEAR, fill=fill_value))
+
+            aug = FixedPerspective(distortion_scale=scale, interpolation=InterpolationMode.BILINEAR, fill=fill_value)
+            augmenters.append(aug)
+            augmenters_seg.append(aug)
 
         elif aug_config["type"] == "elastic_distortion":
             kernel_size = randint(aug_config["min_kernel_size"], aug_config["max_kernel_size"]) // 2 * 2 + 1
             sigma = rand_uniform(aug_config["min_sigma"], aug_config["max_sigma"])
-            alpha= rand_uniform(aug_config["min_alpha"], aug_config["max_alpha"])
-            augmenters.append(ElasticDistortion(kernel_size=(kernel_size, kernel_size), sigma=sigma, alpha=alpha))
+            alpha = rand_uniform(aug_config["min_alpha"], aug_config["max_alpha"])
+
+            aug = ElasticDistortion(kernel_size=(kernel_size, kernel_size), sigma=sigma, alpha=alpha)
+            augmenters.append(aug)
+            augmenters_seg.append(aug)
 
         elif aug_config["type"] == "dilation_erosion":
             kernel_h = randint(aug_config["min_kernel"], aug_config["max_kernel"] + 1)
             kernel_w = randint(aug_config["min_kernel"], aug_config["max_kernel"] + 1)
             if randint(0, 2) == 0:
-                augmenters.append(Erosion((kernel_w, kernel_h), aug_config["iterations"]))
+                aug = Erosion((kernel_w, kernel_h), aug_config["iterations"])
             else:
-                augmenters.append(Dilation((kernel_w, kernel_h), aug_config["iterations"]))
+                aug = Dilation((kernel_w, kernel_h), aug_config["iterations"])
+
+            augmenters.append(aug)
+            augmenters_seg.append(aug)
 
         elif aug_config["type"] == "color_jittering":
             augmenters.append(ColorJitter(contrast=aug_config["factor_contrast"],
@@ -285,7 +341,7 @@ def get_list_augmenters(img, aug_configs, fill_value):
             print("Error - unknown augmentor: {}".format(aug_config["type"]))
             exit(-1)
 
-    return augmenters
+    return augmenters, augmenters_seg
 
 
 def apply_data_augmentation(img, da_config):
@@ -298,10 +354,19 @@ def apply_data_augmentation(img, da_config):
 
     # Convert to PIL Image
     img = img[:, :, 0] if img.shape[2] == 1 else img
+    fill_value = da_config["fill_value"] if "fill_value" in da_config else 255
+
+    use_segmentation = img.shape[2] == 4
+    if use_segmentation:
+        segmentation = np.uint8(img[:, :, 3])
+        segmentation = Image.fromarray(segmentation)
+
+        img = np.uint8(img[:, :, :3])
+        fill_value = fill_value[:3] if "fill_value" in da_config else 255
+
     img = Image.fromarray(img)
 
-    fill_value = da_config["fill_value"] if "fill_value" in da_config else 255
-    augmenters = get_list_augmenters(img, da_config["augmentations"], fill_value=fill_value)
+    augmenters, augmenters_seg = get_list_augmenters(img, da_config["augmentations"], fill_value=fill_value)
     if da_config["order"] == "random":
         random.shuffle(augmenters)
 
@@ -311,6 +376,16 @@ def apply_data_augmentation(img, da_config):
 
     # convert to numpy array
     img = np.array(img)
+
+    if use_segmentation:
+        for augmenter in augmenters_seg:
+            segmentation = augmenter(segmentation)
+
+        segmentation = np.array(segmentation)
+        segmentation = np.expand_dims(segmentation, axis=2)
+
+        img = np.concatenate((img, segmentation), axis=2)
+
     img = np.expand_dims(img, axis=2) if len(img.shape) == 2 else img
     return img, applied_da
 
