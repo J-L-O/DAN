@@ -1,7 +1,5 @@
 #!/bin/bash
-#SBATCH --gres=gpu:1
 #SBATCH --partition=training
-#SBATCH --nodelist=fb10dl07
 
 enroot_path=${ENROOT_PATH:-"/enroot_share/jona/jlo2020+ocr+dan.sqsh"}
 code_path=${CODE_PATH:-"/home/jona/OCR/DAN/"}
