@@ -175,7 +175,7 @@ def main():
         "training_params": {
             "output_folder": "FCN_read_2016_line_syn",  # folder names for logs and weigths
             "max_nb_epochs": 10000,  # max number of epochs for the training
-            "max_training_time": 3600 * 24 * 1.9,  # max training time limit (in seconds)
+            "max_training_time": 3600 * 24 * 10,  # max training time limit (in seconds)
             "load_epoch": "last",  # ["best", "last"], to load weights from best epoch or last trained epoch
             "interval_save_weights": None,  # None: keep best and last only
             "use_ddp": False,  # Use DistributedDataParallel
