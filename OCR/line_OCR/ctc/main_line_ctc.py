@@ -178,7 +178,7 @@ def main():
             "max_training_time": 3600 * 24 * 10,  # max training time limit (in seconds)
             "load_epoch": "last",  # ["best", "last"], to load weights from best epoch or last trained epoch
             "interval_save_weights": None,  # None: keep best and last only
-            "use_ddp": False,  # Use DistributedDataParallel
+            "use_ddp": True,  # Use DistributedDataParallel
             "use_amp": True,  # Enable automatic mix-precision
             "nb_gpu": torch.cuda.device_count(),
             "batch_size": 16,  # mini-batch size per GPU
