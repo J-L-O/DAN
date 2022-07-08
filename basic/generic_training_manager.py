@@ -491,9 +491,12 @@ class GenericTrainingManager:
             # init epoch metrics values
             self.metric_manager["train"] = MetricManager(metric_names=metric_names, dataset_name=self.dataset_name)
 
-            a = self.dataset.train_dataset[0]
+            if self.params["training_params"]["use_ddp"]:
+                self.dataset.train_sampler.set_epoch(self.latest_epoch)
 
-            with tqdm(total=len(self.dataset.train_loader.dataset)) as pbar:
+            loader_length = int(len(self.dataset.train_loader.dataset) / self.params["training_params"]["nb_gpu"])
+
+            with tqdm(total=loader_length) as pbar:
                 pbar.set_description("EPOCH {}/{}".format(num_epoch, nb_epochs))
                 # iterates over mini-batch data
                 for ind_batch, batch_data in enumerate(self.dataset.train_loader):
@@ -574,9 +577,11 @@ class GenericTrainingManager:
         metric_names = self.params["training_params"]["eval_metrics"]
         display_values = None
 
+        loader_length = int(len(loader.dataset) / self.params["training_params"]["nb_gpu"])
+
         # initialize epoch metrics
         self.metric_manager[set_name] = MetricManager(metric_names, dataset_name=self.dataset_name)
-        with tqdm(total=len(loader.dataset)) as pbar:
+        with tqdm(total=loader_length) as pbar:
             pbar.set_description("Evaluation E{}".format(self.latest_epoch))
             with torch.no_grad():
                 # iterate over batch data
@@ -616,7 +621,9 @@ class GenericTrainingManager:
         # initialize epoch metrics
         self.metric_manager[custom_name] = MetricManager(metric_names, self.dataset_name)
 
-        with tqdm(total=len(loader.dataset)) as pbar:
+        loader_length = int(len(loader.dataset) / self.params["training_params"]["nb_gpu"])
+
+        with tqdm(total=loader_length) as pbar:
             pbar.set_description("Prediction")
             with torch.no_grad():
                 for ind_batch, batch_data in enumerate(loader):

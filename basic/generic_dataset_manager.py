@@ -109,30 +109,50 @@ class DatasetManager:
         """
         Load training and validation data loaders
         """
-        self.train_loader = DataLoader(self.train_dataset,
-                                       batch_size=self.batch_size["train"],
-                                       shuffle=True if self.train_sampler is None else False,
-                                       drop_last=False,
-                                       batch_sampler=self.train_sampler,
-                                       sampler=self.train_sampler,
-                                       num_workers=self.params["num_gpu"]*self.params["worker_per_gpu"],
-                                       pin_memory=True,
-                                       collate_fn=self.my_collate_function,
-                                       worker_init_fn=self.seed_worker,
-                                       generator=self.generator)
+        if self.params["use_ddp"]:
+            self.train_loader = DataLoader(self.train_dataset,
+                                           batch_size=self.batch_size["train"],
+                                           sampler=self.train_sampler,
+                                           num_workers=self.params["worker_per_gpu"],
+                                           pin_memory=True,
+                                           collate_fn=self.my_collate_function,
+                                           worker_init_fn=self.seed_worker,
+                                           generator=self.generator)
 
-        for key in self.valid_datasets.keys():
-            self.valid_loaders[key] = DataLoader(self.valid_datasets[key],
-                                                 batch_size=self.batch_size["valid"],
-                                                 sampler=self.valid_samplers[key],
-                                                 batch_sampler=self.valid_samplers[key],
-                                                 shuffle=False,
-                                                 num_workers=self.params["num_gpu"]*self.params["worker_per_gpu"],
-                                                 pin_memory=True,
-                                                 drop_last=False,
-                                                 collate_fn=self.my_collate_function,
-                                                 worker_init_fn=self.seed_worker,
-                                                 generator=self.generator)
+            for key in self.valid_datasets.keys():
+                self.valid_loaders[key] = DataLoader(self.valid_datasets[key],
+                                                     batch_size=self.batch_size["valid"],
+                                                     sampler=self.valid_samplers[key],
+                                                     num_workers=self.params["worker_per_gpu"],
+                                                     pin_memory=True,
+                                                     collate_fn=self.my_collate_function,
+                                                     worker_init_fn=self.seed_worker,
+                                                     generator=self.generator)
+        else:
+            self.train_loader = DataLoader(self.train_dataset,
+                                           batch_size=self.batch_size["train"],
+                                           shuffle=True if self.train_sampler is None else False,
+                                           drop_last=False,
+                                           batch_sampler=self.train_sampler,
+                                           sampler=self.train_sampler,
+                                           num_workers=self.params["num_gpu"]*self.params["worker_per_gpu"],
+                                           pin_memory=True,
+                                           collate_fn=self.my_collate_function,
+                                           worker_init_fn=self.seed_worker,
+                                           generator=self.generator)
+
+            for key in self.valid_datasets.keys():
+                self.valid_loaders[key] = DataLoader(self.valid_datasets[key],
+                                                     batch_size=self.batch_size["valid"],
+                                                     sampler=self.valid_samplers[key],
+                                                     batch_sampler=self.valid_samplers[key],
+                                                     shuffle=False,
+                                                     num_workers=self.params["num_gpu"]*self.params["worker_per_gpu"],
+                                                     pin_memory=True,
+                                                     drop_last=False,
+                                                     collate_fn=self.my_collate_function,
+                                                     worker_init_fn=self.seed_worker,
+                                                     generator=self.generator)
 
     @staticmethod
     def seed_worker(worker_id):
