@@ -691,7 +691,9 @@ class OCRDataset(GenericDataset):
         area_right = coords["right"]
         area_bottom = coords["bottom"]
         num_page_text_label = str(randint(0, 1000))
-        num_page_img = self.generate_typed_text_line_image(num_page_text_label)
+
+        create_segmentation = self.params["config"]["use_segmentation"]
+        num_page_img = self.generate_typed_text_line_image(num_page_text_label, create_segmentation=create_segmentation)
 
         if side == "left":
             background[area_top:area_top+num_page_img.shape[0], area_left:area_left+num_page_img.shape[1]] = num_page_img
@@ -844,6 +846,7 @@ class OCRDataset(GenericDataset):
                         return label, img
 
     def get_printed_line_read_2016(self, mode="body"):
+        create_segmentation = self.params["config"]["use_segmentation"]
         while True:
             sample = self.samples[randint(0, len(self))]
             for page in sample["pages_label"]:
@@ -855,7 +858,7 @@ class OCRDataset(GenericDataset):
                     for line in pg["lines"]:
                         if (mode == "body" and len(line["text"]) > 5) or (mode == "annotation" and len(line["text"]) < 15 and not line["text"].isdigit()):
                             label = line["text"]
-                            img = self.generate_typed_text_line_image(label)
+                            img = self.generate_typed_text_line_image(label, create_segmentation=create_segmentation)
                             return label, img
 
     def generate_typed_text_line_image(self, text, create_segmentation=False):

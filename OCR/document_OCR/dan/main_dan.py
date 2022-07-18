@@ -17,12 +17,12 @@ import numpy as np
 import random
 import torch.multiprocessing as mp
 
-if os.environ.get('REMOTE_PYCHARM_DEBUG_SESSION', False):
-    import pydevd_pycharm
-    pydevd_pycharm.settrace('localhost', port=12034, stdoutToServer=True, stderrToServer=True, suspend=False)
-
 
 def train_and_test(rank, params):
+    if os.environ.get('REMOTE_PYCHARM_DEBUG_SESSION', False) and rank == 0:
+        import pydevd_pycharm
+        pydevd_pycharm.settrace('localhost', port=12034, stdoutToServer=True, stderrToServer=True, suspend=False)
+
     torch.manual_seed(0)
     torch.cuda.manual_seed(0)
     np.random.seed(0)
@@ -56,9 +56,16 @@ def train_and_test(rank, params):
 
 if __name__ == "__main__":
 
-    dataset_name = "WPI" # "READ_2016"  # ["RIMES", "READ_2016", "WPI"]
+    dataset_name = "READ_2016"  # ["RIMES", "READ_2016", "WPI"]
     dataset_level = "double_page"  # ["page", "double_page"]
     dataset_variant = "_sem"
+    use_segmentation = True
+
+    train_epochs = {
+        "READ_2016_page": 3900,
+        "READ_2016_double_page": 4400,
+        "RIMES_page": 1300
+    }
 
     # max number of lines for synthetic documents
     max_nb_lines = {
@@ -82,9 +89,10 @@ if __name__ == "__main__":
                 "{}-valid".format(dataset_name): [(dataset_name, "valid"), ],
             },
             "config": {
-                "is_labeled": False,
+                "use_segmentation": use_segmentation,  # Use the computed segmentation images
+                "is_labeled": True,
                 "load_in_memory": True,  # Load all images in CPU memory
-                "worker_per_gpu": 4,  # Num of parallel processes per gpu for data loading
+                "worker_per_gpu": 8,  # Num of parallel processes per gpu for data loading
                 "width_divisor": 8,  # Image width will be divided by 8
                 "height_divisor": 32,  # Image height will be divided by 32
                 "padding_value": 0,  # Image padding value
@@ -144,13 +152,13 @@ if __name__ == "__main__":
             # "transfer_learning": None,
             "transfer_learning": {
                 # model_name: [state_dict_name, checkpoint_path, learnable, strict]
-                "encoder": ["encoder", "../../line_OCR/ctc/outputs/FCN_read_2016_line_syn/checkpoints/best.pt", True, True],
-                "decoder": ["decoder", "../../line_OCR/ctc/outputs/FCN_read_2016_line_syn/checkpoints/best.pt", True, False],
+                "encoder": ["encoder", "../../line_OCR/ctc/outputs/FCN_read_2016_line_syn/checkpoints/last_9999.pt", True, True],
+                "decoder": ["decoder", "../../line_OCR/ctc/outputs/FCN_read_2016_line_syn/checkpoints/last_9999.pt", True, False],
             },
             "transfered_charset": True,  # Transfer learning of the decision layer based on charset of the line HTR model
             "additional_tokens": 1,  # for decision layer = [<eot>, ], only for transfered charset
 
-            "input_channels": 3,  # number of channels of input image
+            "input_channels": 4 if use_segmentation else 3,  # 1 for grayscale, 3 for RGB (or grayscale as RGB)
             "dropout": 0.5,  # dropout rate for encoder
             "enc_dim": 256,  # dimension of extracted features
             "nb_layers": 5,  # encoder
@@ -176,16 +184,16 @@ if __name__ == "__main__":
         },
 
         "training_params": {
-            "evaluate_only": True,
+            "evaluate_only": False,
             "output_folder": "dan_read_page",  # folder name for checkpoint and results
-            "store_text": True,
-            "max_nb_epochs": 50000,  # maximum number of epochs before to stop
-            "max_training_time": 3600 * 24 * 1.9,  # maximum time before to stop (in seconds)
+            "store_text": False,
+            "max_nb_epochs": train_epochs[dataset_name + dataset_level],  # maximum number of epochs before to stop
+            "max_training_time": 3600 * 24 * 10,  # maximum time before to stop (in seconds)
             "load_epoch": "last",  # ["best", "last"]: last to continue training, best to evaluate
             "interval_save_weights": None,  # None: keep best and last only
             "batch_size": 1,  # mini-batch size for training
             "valid_batch_size": 4,  # mini-batch size for valdiation
-            "use_ddp": False,  # Use DistributedDataParallel
+            "use_ddp": True,  # Use DistributedDataParallel
             "ddp_port": "20027",
             "use_amp": True,  # Enable automatic mix-precision
             "nb_gpu": torch.cuda.device_count(),

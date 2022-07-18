@@ -53,27 +53,34 @@ class Manager(OCRManager):
         else:
             simulated_y_pred = y
 
+        if self.params["training_params"]["use_ddp"]:
+            encoder = self.models["encoder"].module
+            decoder = self.models["decoder"].module
+        else:
+            encoder = self.models["encoder"]
+            decoder = self.models["decoder"]
+
         with autocast(enabled=self.params["training_params"]["use_amp"]):
             hidden_predict = None
             cache = None
 
-            raw_features = self.models["encoder"](x)
+            raw_features = encoder(x)
             features_size = raw_features.size()
             b, c, h, w = features_size
 
-            pos_features = self.models["decoder"].features_updater.get_pos_features(raw_features)
+            pos_features = decoder.features_updater.get_pos_features(raw_features)
             features = torch.flatten(pos_features, start_dim=2, end_dim=3).permute(2, 0, 1)
             enhanced_features = pos_features
             enhanced_features = torch.flatten(enhanced_features, start_dim=2, end_dim=3).permute(2, 0, 1)
-            output, pred, hidden_predict, cache, weights = self.models["decoder"](features, enhanced_features,
-                                                                               simulated_y_pred[:, :-1],
-                                                                               reduced_size,
-                                                                               [max(y_len) for _ in range(b)],
-                                                                               features_size,
-                                                                               start=0,
-                                                                               hidden_predict=hidden_predict,
-                                                                               cache=cache,
-                                                                               keep_all_weights=True)
+            output, pred, hidden_predict, cache, weights = decoder(features, enhanced_features,
+                                                                   simulated_y_pred[:, :-1],
+                                                                   reduced_size,
+                                                                   [max(y_len) for _ in range(b)],
+                                                                   features_size,
+                                                                   start=0,
+                                                                   hidden_predict=hidden_predict,
+                                                                   cache=cache,
+                                                                   keep_all_weights=True)
 
             loss_ce = loss_func(pred, y[:, 1:])
             sum_loss += loss_ce
@@ -102,6 +109,13 @@ class Manager(OCRManager):
 
         max_chars = self.params["training_params"]["max_char_prediction"]
 
+        if self.params["training_params"]["use_ddp"]:
+            encoder = self.models["encoder"].module
+            decoder = self.models["decoder"].module
+        else:
+            encoder = self.models["encoder"]
+            decoder = self.models["decoder"]
+
         start_time = time.time()
         with autocast(enabled=self.params["training_params"]["use_amp"]):
             b = x.size(0)
@@ -118,23 +132,23 @@ class Manager(OCRManager):
                 features_list = list()
                 for i in range(b):
                     pos = batch_data["imgs_position"]
-                    features_list.append(self.models["encoder"](x[i:i+1, :, pos[i][0][0]:pos[i][0][1], pos[i][1][0]:pos[i][1][1]]))
+                    features_list.append(encoder(x[i:i+1, :, pos[i][0][0]:pos[i][0][1], pos[i][1][0]:pos[i][1][1]]))
                 max_height = max([f.size(2) for f in features_list])
                 max_width = max([f.size(3) for f in features_list])
                 features = torch.zeros((b, features_list[0].size(1), max_height, max_width), device=self.device, dtype=features_list[0].dtype)
                 for i in range(b):
                     features[i, :, :features_list[i].size(2), :features_list[i].size(3)] = features_list[i]
             else:
-                features = self.models["encoder"](x)
+                features = encoder(x)
             features_size = features.size()
             coverage_vector = torch.zeros((features.size(0), 1, features.size(2), features.size(3)), device=self.device)
-            pos_features = self.models["decoder"].features_updater.get_pos_features(features)
+            pos_features = decoder.features_updater.get_pos_features(features)
             features = torch.flatten(pos_features, start_dim=2, end_dim=3).permute(2, 0, 1)
             enhanced_features = pos_features
             enhanced_features = torch.flatten(enhanced_features, start_dim=2, end_dim=3).permute(2, 0, 1)
 
             for i in range(0, max_chars):
-                output, pred, hidden_predict, cache, weights = self.models["decoder"](features, enhanced_features, predicted_tokens, reduced_size, predicted_tokens_len, features_size, start=0, hidden_predict=hidden_predict, cache=cache, num_pred=1)
+                output, pred, hidden_predict, cache, weights = decoder(features, enhanced_features, predicted_tokens, reduced_size, predicted_tokens_len, features_size, start=0, hidden_predict=hidden_predict, cache=cache, num_pred=1)
                 whole_output.append(output)
                 confidence_scores.append(torch.max(torch.softmax(pred[:, :], dim=1), dim=1).values)
                 coverage_vector = torch.clamp(coverage_vector + weights, 0, 1)
