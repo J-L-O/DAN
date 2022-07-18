@@ -187,7 +187,7 @@ if __name__ == "__main__":
             "evaluate_only": False,
             "output_folder": "dan_read_page",  # folder name for checkpoint and results
             "store_text": False,
-            "max_nb_epochs": train_epochs[dataset_name + dataset_level],  # maximum number of epochs before to stop
+            "max_nb_epochs": train_epochs[f"{dataset_name}_{dataset_level}"],  # maximum number of epochs before to stop
             "max_training_time": 3600 * 24 * 10,  # maximum time before to stop (in seconds)
             "load_epoch": "last",  # ["best", "last"]: last to continue training, best to evaluate
             "interval_save_weights": None,  # None: keep best and last only
