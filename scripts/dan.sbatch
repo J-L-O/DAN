@@ -8,6 +8,6 @@ srun  \
 --container-image "$enroot_path"  \
 --container-writable  \
 --container-remap-root  \
---container-workdir /workspace/OCR/document_ocr/dan \
+--container-workdir /workspace/OCR/document_OCR/dan \
 --container-mounts "$code_path":/workspace \
 python main_dan.py
