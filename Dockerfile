@@ -34,7 +34,7 @@ WORKDIR /workspace
 COPY ./requirements.txt /workspace/requirements.txt
 RUN pip install \
         cython \
-        pydevd-pycharm~=213.6777.50 && \
+        pydevd-pycharm~=221.5921.27 && \
     pip install -r requirements.txt && \
     pip cache purge && \
     rm requirements.txt
